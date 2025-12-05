@@ -1,0 +1,16 @@
+name: "mongodb-testing"
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb_local
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db  # persists data across restarts
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin   # optional, root user
+      MONGO_INITDB_ROOT_PASSWORD: secret  # optional, root password
+
+volumes:
+  mongo_data:
