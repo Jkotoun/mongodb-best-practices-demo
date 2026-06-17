@@ -1,24 +1,8 @@
-import {
-  IsInt,
-  IsMongoId,
-  IsString,
-  Max,
-  MaxLength,
-  Min,
-  MinLength,
-} from 'class-validator';
-
+// No class-validator decorators — validation is delegated to the Review schema
+// (Principle #3). See MongooseValidationFilter for how the schema error becomes
+// a 400 response.
 export class CreateReviewDto {
-  @IsMongoId()
   userId: string;
-
-  @IsInt()
-  @Min(1)
-  @Max(5)
   rating: number;
-
-  @IsString()
-  @MinLength(1)
-  @MaxLength(500)
   comment: string;
 }

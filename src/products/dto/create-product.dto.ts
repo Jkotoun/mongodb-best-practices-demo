@@ -1,29 +1,10 @@
-import {
-  IsInt,
-  IsMongoId,
-  IsOptional,
-  IsPositive,
-  IsString,
-  Matches,
-  Min,
-} from 'class-validator';
-
+// No class-validator decorators on purpose — request validation is delegated
+// entirely to the Mongoose schema (Principle #3). Bad input falls through to
+// the schema validators, which throw and are surfaced as 400s by
+// MongooseValidationFilter.
 export class CreateProductDto {
-  @IsString()
-  @Matches(/^[A-Za-z0-9][A-Za-z0-9 .,'&-]{1,79}$/, {
-    message: 'name must be 2-80 chars and start with a letter or digit',
-  })
   name: string;
-
-  @IsPositive()
   price: number;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
   stock?: number;
-
-  // Principle #5 — caller supplies the supplier reference, validated as an ObjectId.
-  @IsMongoId()
   supplierId: string;
 }

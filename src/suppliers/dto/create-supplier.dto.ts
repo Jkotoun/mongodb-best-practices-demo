@@ -1,15 +1,8 @@
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
-
+// No class-validator decorators — validation is delegated to the Supplier
+// schema (Principle #3). Schema errors are surfaced as 400s by
+// MongooseValidationFilter.
 export class CreateSupplierDto {
-  @IsString()
-  @MinLength(2)
   name: string;
-
-  @IsOptional()
-  @IsEmail()
   contactEmail?: string;
-
-  @IsOptional()
-  @IsString()
   country?: string;
 }

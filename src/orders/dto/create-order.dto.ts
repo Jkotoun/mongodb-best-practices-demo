@@ -1,29 +1,12 @@
-import { Type } from 'class-transformer';
-import {
-  ArrayMinSize,
-  IsArray,
-  IsInt,
-  IsMongoId,
-  Min,
-  ValidateNested,
-} from 'class-validator';
-
+// No class-validator decorators — validation is delegated to the Order schema
+// (Principle #3), including the embedded-item mins and the "at least one item"
+// rule. Schema errors are surfaced as 400s by MongooseValidationFilter.
 export class OrderItemInput {
-  @IsMongoId()
   productId: string;
-
-  @IsInt()
-  @Min(1)
   quantity: number;
 }
 
 export class CreateOrderDto {
-  @IsMongoId()
   userId: string;
-
-  @IsArray()
-  @ArrayMinSize(1)
-  @ValidateNested({ each: true })
-  @Type(() => OrderItemInput)
   items: OrderItemInput[];
 }
