@@ -15,15 +15,6 @@ export class ProductsService {
     return this.productModel.create(dto);
   }
 
-  /**
-   * Principles #1/#2 payoff: a single read returns the product together with
-   * its embedded `topReviews` and the duplicated `reviewCount`/`ratingAverage`
-   * — no join to the `reviews` collection.
-   *
-   * Principle #5: only when `withSupplier` is requested do we resolve the
-   * supplier reference with `.populate()`. The link is paid for on demand,
-   * never duplicated onto every product.
-   */
   async findById(id: string, withSupplier = false): Promise<ProductDocument> {
     const query = this.productModel.findById(id);
     if (withSupplier) {

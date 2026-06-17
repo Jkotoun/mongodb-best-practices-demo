@@ -14,7 +14,6 @@ import {
   SupplierDocument,
 } from './suppliers/schemas/supplier.schema';
 
-// Fixed demo user so the index-backed search endpoint has something to find.
 const DEMO_USER_ID = '5f9d7a3b2c1e4f0012345678';
 
 const reviewerId = (i: number) =>
@@ -37,7 +36,6 @@ async function seed() {
   const reviewsService = app.get(ReviewsService);
   const ordersService = app.get(OrdersService);
 
-  // Start from a clean slate.
   await Promise.all([
     supplierModel.deleteMany({}),
     productModel.deleteMany({}),
@@ -45,7 +43,6 @@ async function seed() {
     orderModel.deleteMany({}),
   ]);
 
-  // --- Suppliers (Principle #5: linked, not duplicated) ---
   const acme = await supplierModel.create({
     name: 'Acme Components',
     contactEmail: 'sales@acme.example',
@@ -57,7 +54,6 @@ async function seed() {
     country: 'DE',
   });
 
-  // --- Products ---
   const seedProducts = [
     {
       name: 'Mechanical Keyboard',
@@ -84,7 +80,6 @@ async function seed() {
     products.push(await productsService.create(p));
   }
 
-  // --- Reviews (8 each: 5 land in the embedded top-5, 3 spill to overflow) ---
   const comments = [
     'Excellent quality, highly recommend.',
     'Works as described.',
@@ -105,7 +100,6 @@ async function seed() {
     }
   }
 
-  // --- Orders (Principle #1: embedded product snapshots) ---
   await ordersService.create({
     userId: DEMO_USER_ID,
     items: [

@@ -11,7 +11,6 @@ export class OrdersController {
     return this.ordersService.create(dto);
   }
 
-  // GET /orders?userId=...&productName=...  (index-backed profile search)
   @Get()
   search(
     @Query('userId') userId: string,

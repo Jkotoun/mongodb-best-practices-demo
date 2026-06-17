@@ -11,7 +11,6 @@ export class ProductsController {
     return this.productsService.create(dto);
   }
 
-  // GET /products/:id?withSupplier=true
   @Get(':id')
   findById(
     @Param('id') id: string,

@@ -16,14 +16,6 @@ export class ReviewsService {
     private readonly productModel: Model<ProductDocument>,
   ) {}
 
-  /**
-   * Principle #2 — maintaining duplicated data (the cost side).
-   *
-   * One logical write fans out to two places:
-   *   1. the canonical row in the `reviews` collection, and
-   *   2. the product document, whose embedded `topReviews` + aggregates we
-   *      refresh so the product page stays a single read.
-   */
   async addReview(
     productId: string,
     dto: CreateReviewDto,
@@ -33,7 +25,6 @@ export class ReviewsService {
       throw new NotFoundException(`Product ${productId} not found`);
     }
 
-    // 1. Write the canonical review.
     await this.reviewModel.create({
       productId: new Types.ObjectId(productId),
       userId: new Types.ObjectId(dto.userId),
@@ -41,7 +32,6 @@ export class ReviewsService {
       comment: dto.comment,
     });
 
-    // 2. Recompute the duplicated aggregates from the source of truth.
     const [stats] = await this.reviewModel.aggregate<{
       count: number;
       average: number;
@@ -56,7 +46,6 @@ export class ReviewsService {
       },
     ]);
 
-    // 3. Refresh the embedded latest-5 subset.
     const latest = await this.reviewModel
       .find({ productId: product._id })
       .sort({ createdAt: -1 })
@@ -78,10 +67,6 @@ export class ReviewsService {
     return product;
   }
 
-  /**
-   * Principle #2 — the overflow path. Reviews beyond the embedded 5 are paged
-   * out of the dedicated `reviews` collection, sorted newest first.
-   */
   async findReviews(productId: string, page = 1, limit = 5) {
     const skip = (page - 1) * limit;
     const filter = { productId: new Types.ObjectId(productId) };

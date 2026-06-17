@@ -11,12 +11,10 @@ import {
 import { CreateReviewDto } from './dto/create-review.dto';
 import { ReviewsService } from './reviews.service';
 
-// Reviews are a sub-resource of products: /products/:id/reviews
 @Controller('products/:id/reviews')
 export class ReviewsController {
   constructor(private readonly reviewsService: ReviewsService) {}
 
-  // Full, paginated list out of the dedicated `reviews` collection.
   @Get()
   findReviews(
     @Param('id') id: string,
@@ -26,7 +24,6 @@ export class ReviewsController {
     return this.reviewsService.findReviews(id, page, limit);
   }
 
-  // Adds a review and refreshes the product's duplicated top-5 + aggregates.
   @Post()
   addReview(@Param('id') id: string, @Body() dto: CreateReviewDto) {
     return this.reviewsService.addReview(id, dto);

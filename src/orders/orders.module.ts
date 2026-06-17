@@ -9,8 +9,6 @@ import { Order, OrderSchema } from './schemas/order.schema';
   imports: [
     MongooseModule.forFeature([
       { name: Order.name, schema: OrderSchema },
-      // Product registered here too so the order service can read product
-      // snapshots without a cross-module circular dependency.
       { name: Product.name, schema: ProductSchema },
     ]),
   ],

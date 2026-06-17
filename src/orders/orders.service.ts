@@ -18,14 +18,6 @@ export class OrdersService {
     private readonly productModel: Model<ProductDocument>,
   ) {}
 
-  /**
-   * Principle #1 — Denormalization in action.
-   *
-   * We read the referenced products once, then *copy* the bits we need
-   * (name, price) into each embedded line item as a snapshot, and compute
-   * totals. The resulting order is self-contained: rendering it later needs
-   * no join, and it is immune to future product price/name changes.
-   */
   async create(dto: CreateOrderDto): Promise<OrderDocument> {
     const ids = dto.items.map((i) => new Types.ObjectId(i.productId));
     const products = await this.productModel.find({ _id: { $in: ids } }).exec();
@@ -55,7 +47,6 @@ export class OrdersService {
     });
   }
 
-  /** Single read returns the order with all embedded items — no join. */
   async findById(id: string): Promise<OrderDocument> {
     const order = await this.orderModel.findById(id).exec();
     if (!order) {
@@ -64,11 +55,6 @@ export class OrdersService {
     return order;
   }
 
-  /**
-   * Principle #4 — index-backed profile search: "orders where this user bought
-   * a product named X". Served by the compound index
-   * `{ userId: 1, 'items.productName': 1 }`.
-   */
   findByUserAndProductName(
     userId: string,
     productName?: string,
