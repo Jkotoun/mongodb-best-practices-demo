@@ -114,18 +114,6 @@ async function seed() {
 
   console.log('Seed complete.');
 
-  console.log({
-    demoUserId: DEMO_USER_ID,
-    suppliers: [acme._id.toString(), globex._id.toString()],
-    products: products.map((p) => ({ id: p._id.toString(), name: p.name })),
-    tryItOut: [
-      `GET /products/${products[0]._id.toString()}`,
-      `GET /products/${products[0]._id.toString()}?withSupplier=true`,
-      `GET /products/${products[0]._id.toString()}/reviews?page=2&limit=5`,
-      `GET /orders?userId=${DEMO_USER_ID}&productName=Mechanical%20Keyboard`,
-    ],
-  });
-
   await app.close();
 }
 
