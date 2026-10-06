@@ -1,98 +1,83 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# MongoDB Testing — Schema Design Best Practices
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+A personal sandbox for practicing MongoDB data-modeling decisions with NestJS and Mongoose: when to embed vs. reference, how to denormalize for read performance, where validation and integrity should actually live, and how to index for the queries you really run.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+The domain is a small e-commerce slice — suppliers, products, reviews, orders — chosen because it naturally contains every classic modeling tension: a 1:many relationship that barely changes (supplier → products), a 1:many relationship that grows without bound (product → reviews), and data that must stay frozen at a point in time even though its source keeps changing (order line items vs. live product prices).
 
-## Description
+## Data model
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+```
+Supplier ──┐
+           │ (referenced)
+           ▼
+        Product ──── topReviews[] (embedded subset, max 5, denormalized)
+           │
+           │ (referenced, full history)
+           ▼
+         Review
 
-## Project setup
-
-```bash
-$ pnpm install
+        Product ──── snapshotted into ──── Order.items[]
+                                               │
+                                          (embedded)
 ```
 
-## Compile and run the project
+- **Supplier** — plain referenced document (`Product.supplierId`). It changes rarely and isn't needed on every product read, so there's no reason to embed or duplicate it.
+- **Product** — embeds `topReviews`, a capped array of the 5 most recent reviews, plus cached `reviewCount` / `ratingAverage`. The full review history lives separately in `Review`, referenced by `productId`.
+- **Review** — normalized collection, indexed on `productId`, paginated with `skip`/`limit`.
+- **Order** — embeds a *snapshot* of each line item (`productName`, `unitPrice`, `lineTotal` as they were at purchase time), not just a `productId` reference.
 
-```bash
-# development
-$ pnpm run start
+## Best practices this repo exercises
 
-# watch mode
-$ pnpm run start:dev
+### Embedding vs. referencing — the subset pattern
+**Wrong way:** embed every review directly in the product document (`Product.reviews: Review[]`). A popular product accumulates thousands of reviews, the document keeps growing, approaches the 16MB document limit, and every write to the array re-serializes the whole thing.
+**This repo:** `Product.topReviews` embeds only the latest 5 reviews — just enough to render a product page without a second query — while the authoritative, unbounded history lives in its own `Review` collection. Adding a review ([`reviews.service.ts`](src/products/reviews.service.ts)) writes to `Review`, then recomputes the cached top-5 slice and stats back onto the product.
 
-# production mode
-$ pnpm run start:prod
+### Denormalization for read performance
+**Wrong way:** compute `ratingAverage` and `reviewCount` with an aggregation on every product read.
+**This repo:** both are cached fields on `Product`, recalculated once per write (when a review is added) instead of on every read — a deliberate read/write tradeoff that favors the far more common operation (viewing a product).
+
+### Snapshotting mutable data
+**Wrong way:** `Order.items` stores only a `productId` and resolves `name`/`price` by populating the live `Product` at render time. Change the price tomorrow and every past invoice silently changes with it.
+**This repo:** [`orders.service.ts`](src/orders/orders.service.ts) copies `productName`, `unitPrice`, and the computed `lineTotal` onto the order item at creation time. The order is a historical record, not a live view of the catalog.
+
+### Schema-level validation as the source of truth
+**Wrong way:** validate only at the DTO/controller boundary (e.g. `class-validator`). Anything that writes to the collection outside that one code path — a seed script, a migration, a different service — bypasses validation entirely.
+**This repo:** validation (`match`, `min`/`max`, `enum`, `required`) is declared directly on the Mongoose schemas (see [`product.schema.ts`](src/products/schemas/product.schema.ts), [`order.schema.ts`](src/orders/schemas/order.schema.ts)), so it's enforced no matter what writes the data. DTOs here are plain shape definitions, not validation.
+
+### Indexing for the queries you actually run
+**Wrong way:** add indexes speculatively, or not at all, and let common lookups fall back to a collection scan.
+**This repo:** `Product` is indexed on `name`; `Order` has a compound index on `{ userId: 1, 'items.productName': 1 }` because that's exactly the shape of the "find my orders for product X" query exposed by `GET /orders`.
+
+### Referential integrity lives in the application layer
+MongoDB has no foreign key constraints. `OrdersService.create` explicitly loads every referenced product and rejects the order if any id doesn't resolve, rather than trusting the input and discovering a dangling reference later.
+
+## Project structure
+
+```
+src/
+  suppliers/   # Supplier CRUD — referenced by products
+  products/    # Product CRUD + Review sub-resource (embedded subset + full history)
+  orders/      # Order creation — snapshots product data, validates references
+  config/      # Mongoose connection config (reads MONGO_URL)
+  seed.ts      # Populates all four collections with sample data
 ```
 
-## Run tests
+## Running it
 
 ```bash
-# unit tests
-$ pnpm run test
-
-# e2e tests
-$ pnpm run test:e2e
-
-# test coverage
-$ pnpm run test:cov
+docker compose up -d        # starts MongoDB locally
+cp .env.example .env        # MONGO_URL already points at the local container
+pnpm install
+pnpm run start:dev           # watch mode, http://localhost:3000
+pnpm run seed                 # optional: seed sample suppliers/products/reviews/orders
 ```
 
-## Deployment
+A [Postman collection](postman_collection.json) covers every endpoint (suppliers, products, reviews, orders) for manual exploration.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+## Known gaps / not goals
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+This is a learning sandbox, not a production template:
 
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- No auth/authorization on any endpoint.
+- No multi-document transactions around the order-creation / stock-decrement flow.
+- Test coverage is currently thin — unit and e2e tests covering the real endpoints are a planned follow-up, not yet written.
