@@ -51,6 +51,14 @@ Supplier ──┐
 ### Referential integrity lives in the application layer
 MongoDB has no foreign key constraints. `OrdersService.create` explicitly loads every referenced product and rejects the order if any id doesn't resolve, rather than trusting the input and discovering a dangling reference later.
 
+## API layer
+
+These aren't MongoDB modeling decisions, but round out the showcase as a usable API:
+
+- **Response DTOs, not raw documents.** Controllers map Mongoose documents to explicit `*ResponseDto` classes (e.g. [`product-response.dto.ts`](src/products/dto/product-response.dto.ts)) instead of returning them directly. Returning a document as-is leaks persistence internals into the wire format — notably Mongoose's `__v` version key — and couples the API shape 1:1 to the schema.
+- **OpenAPI docs.** `@nestjs/swagger` decorators on every controller and DTO; browse them at `/docs` once the app is running.
+- **A GCP OIDC guard, applied globally.** [`GcpOidcGuard`](src/common/guards/gcp-oidc.guard.ts) verifies a Google-signed OIDC bearer token (via `google-auth-library`, audience from `OIDC_AUDIENCE`) on every request. It's a no-op outside `NODE_ENV=production` (bypassed for `local`/`development`/`test`), so it doesn't get in the way of local dev or the test suite, but a production deployment is actually protected.
+
 ## Project structure
 
 ```
@@ -58,6 +66,7 @@ src/
   suppliers/   # Supplier CRUD — referenced by products
   products/    # Product CRUD + Review sub-resource (embedded subset + full history)
   orders/      # Order creation — snapshots product data, validates references
+  common/      # Cross-cutting concerns (GcpOidcGuard)
   config/      # Mongoose connection config (reads MONGO_URL)
   seed.ts      # Populates all four collections with sample data
 ```
@@ -66,18 +75,21 @@ src/
 
 ```bash
 docker compose up -d        # starts MongoDB locally
-cp .env.example .env        # MONGO_URL already points at the local container
+cp .env.example .env        # MONGO_URL already points at the local container; NODE_ENV=local bypasses auth
 pnpm install
-pnpm run start:dev           # watch mode, http://localhost:3000
+pnpm run start:dev           # watch mode, http://localhost:4000
 pnpm run seed                 # optional: seed sample suppliers/products/reviews/orders
 ```
 
-A [Postman collection](postman_collection.json) covers every endpoint (suppliers, products, reviews, orders) for manual exploration.
+Swagger/OpenAPI docs are served at `/docs`. A [Postman collection](postman_collection.json) also covers every endpoint (suppliers, products, reviews, orders) for manual exploration.
+
+## Testing
+
+`test/api.e2e-spec.ts` runs the real endpoints against a live MongoDB (the one from `docker compose up -d`), covering the subset-pattern review cache, order snapshotting, referential-integrity rejection, and pagination. Run it with `pnpm run test:e2e`.
 
 ## Known gaps / not goals
 
 This is a learning sandbox, not a production template:
 
-- No auth/authorization on any endpoint.
 - No multi-document transactions around the order-creation / stock-decrement flow.
-- Test coverage is currently thin — unit and e2e tests covering the real endpoints are a planned follow-up, not yet written.
+- Unit tests are still missing — only e2e coverage exists so far.
