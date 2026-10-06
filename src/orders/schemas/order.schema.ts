@@ -50,7 +50,12 @@ export class Order {
   @Prop({ required: true, min: 0 })
   total: number;
 
-  @Prop({ required: true, enum: ORDER_STATUSES, default: 'pending' })
+  @Prop({
+    type: String,
+    required: true,
+    enum: ORDER_STATUSES,
+    default: 'pending',
+  })
   status: OrderStatus;
 }
 
